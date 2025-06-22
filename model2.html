@@ -22,5 +22,25 @@
     <a-entity camera></a-entity>
     
 </a-scene>
+
+<!-- Button overlay -->
+<button id="myButton" style="
+  position: absolute;
+  top: 20px;
+  left: 20px;
+  padding: 10px 20px;
+  font-size: 16px;
+  background-color: rgba(255, 255, 255, 0.7);
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+">button</button>
+
+<script>
+  document.getElementById('myButton').addEventListener('click', function() {
+    window.location.href = 'http://aiex1973.github.io//AR_4H/model3.html';
+  });
+</script>
+
 </body>
 </html>
