@@ -5,6 +5,20 @@
 <script src="js/aframe-ar.js"></script>
 <body style="margin: 0px; overflow: hidden;">
 
+<button id="PAW" class="pauseButton" style="
+    -webkit-appearance: none;	
+    font-family: Courier;
+    font-size: 12pt;
+    text-align: center;
+    position: absolute;
+    min-width: 80px;
+    border-radius: 0;
+    z-index: 1;
+    right: 20px;
+	top: 10px;
+">Pause</button>
+
+
 <a-scene embedded vr-mode-ui="enabled: false;" arjs="debugUIEnabled: false;">
 
     <a-assets>
@@ -23,6 +37,15 @@
     
 </a-scene>
 
+<script>
+***
+document.getElementById("PAW").addEventListener("click", togglePause, false);
+***
+// Toggle Pause
+function togglePause() {
+	PawsOn = 1 - PawsOn;	// toggles between 0 and 1
+}
+</script>
 
 </body>
 </html>
