@@ -6,7 +6,6 @@
 <body style="margin: 0px; overflow: hidden;">
 
 <button id="myButton" style="
-    -webkit-appearance: none;	
     font-family: Courier;
     font-size: 12pt;
     text-align: center;
@@ -22,13 +21,13 @@
 <a-scene embedded vr-mode-ui="enabled: false;" arjs="debugUIEnabled: false;">
 
     <a-assets>
-        <a-asset-item id="tree" src="models/barn.gltf"></a-asset-item>
+        <a-asset-item id="tree" src="models/simple_car_only.gltf"></a-asset-item>
 	</a-assets>
     
     <a-marker type="pattern" url="data/hiro.patt">
         <a-entity   position="0 0 0" 
                     rotation="0 0 0"
-                    scale="0.01 0.01 0.01"
+                    scale="0.2 0.2 0.2"
                     gltf-model="#tree" >
         </a-entity>
     </a-marker>
