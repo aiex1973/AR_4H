@@ -1,0 +1,120 @@
+<!doctype HTML>
+<html>
+<link rel="icon" href="data:;base64,iVBORw0KGgo=">
+<script src="js/aframe.min.js"></script>
+<script src="js/aframe-ar.js"></script>
+<body style="margin: 0px; overflow: hidden;">
+
+<button id="button1" style="
+    font-family: Courier;
+    font-size: 12pt;
+    text-align: center;
+    position: absolute;
+    min-width: 80px;
+    border-radius: 0;
+    z-index: 1;
+    left: 20px;
+	  top: 10px;
+">2 mph</button>
+
+<button id="button2" style="
+    font-family: Courier;
+    font-size: 12pt;
+    text-align: center;
+    position: absolute;
+    min-width: 80px;
+    border-radius: 0;
+    z-index: 1;
+    left: 20px;
+	  top: 50px;
+">5 mph</button>
+
+<button id="button3" style="
+    font-family: Courier;
+    font-size: 12pt;
+    text-align: center;
+    position: absolute;
+    min-width: 80px;
+    border-radius: 0;
+    z-index: 1;
+    left: 20px;
+	  top: 90px;
+">10 mph</button>
+
+<button id="button4" style="
+    font-family: Courier;
+    font-size: 12pt;
+    text-align: center;
+    position: absolute;
+    min-width: 80px;
+    border-radius: 0;
+    z-index: 1;
+    left: 100px;
+	  top: 10px;
+">2 mph (45 deg)</button>
+
+<button id="button5" style="
+    font-family: Courier;
+    font-size: 12pt;
+    text-align: center;
+    position: absolute;
+    min-width: 80px;
+    border-radius: 0;
+    z-index: 1;
+    left: 100px;
+	  top: 50px;
+">5 mph (45 deg)</button>
+
+<button id="button6" style="
+    font-family: Courier;
+    font-size: 12pt;
+    text-align: center;
+    position: absolute;
+    min-width: 80px;
+    border-radius: 0;
+    z-index: 1;
+    left: 10px;
+	  top: 90px;
+">10 mph (45 deg)</button>
+
+<a-scene embedded vr-mode-ui="enabled: false;" arjs="debugUIEnabled: false;">
+
+    <a-assets>
+        <a-asset-item id="car" src="models/simple_barn_only.gltf"></a-asset-item>
+	</a-assets>
+    
+    <a-marker type="pattern" url="data/hiro.patt">
+        <a-entity   position="-4 0 0" 
+                    rotation="0 0 0"
+                    scale="1 1 1"
+                    gltf-model="#car" >
+        </a-entity>
+    </a-marker>
+    
+    <a-entity camera></a-entity>
+    
+</a-scene>
+
+<script>
+  document.getElementById('button1').addEventListener('click', function() {
+    window.location.href = 'http://aiex1973.github.io/AR_4H/simpleBarn2.html';
+  });
+  document.getElementById('button2').addEventListener('click', function() {
+    window.location.href = 'http://aiex1973.github.io/AR_4H/simpleBarn5.html';
+  });
+  document.getElementById('button3').addEventListener('click', function() {
+    window.location.href = 'http://aiex1973.github.io/AR_4H/simpleBarn10.html';
+  });
+  document.getElementById('button4').addEventListener('click', function() {
+    window.location.href = 'http://aiex1973.github.io/AR_4H/simpleBarn2a.html';
+  });
+  document.getElementById('button5').addEventListener('click', function() {
+    window.location.href = 'http://aiex1973.github.io/AR_4H/simpleBarn5a.html';
+  });
+  document.getElementById('button6').addEventListener('click', function() {
+    window.location.href = 'http://aiex1973.github.io/AR_4H/simpleBarn10a.html';
+  });
+</script>
+
+</body>
+</html>
