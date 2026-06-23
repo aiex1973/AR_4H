@@ -1,0 +1,493 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Natural Ventilation Visualizer</title>
+    <style>
+        /* Mobile-First CSS */
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            margin: 0;
+            padding: 15px;
+            background-color: #f0f4f8;
+            color: #2d3748;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            box-sizing: border-box;
+            min-height: 100vh;
+        }
+
+        .controls {
+            background: white;
+            padding: 15px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            width: 100%;
+            box-sizing: border-box;
+        }
+
+        .visualizer {
+            background: white;
+            padding: 10px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+            position: relative;
+            width: 100%;
+            box-sizing: border-box;
+            height: 50vh;
+            min-height: 350px;
+        }
+
+        h2, h3 { margin: 0 0 5px 0; color: #1a202c; }
+        
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        label { 
+            font-weight: bold; 
+            font-size: 0.95em; 
+            color: #4a5568;
+        }
+
+        input[type="range"] { 
+            width: 100%; 
+            padding: 12px 0; /* Larger touch target */
+            margin: 0;
+            touch-action: manipulation;
+        }
+
+        .value-display { 
+            font-size: 0.9em; 
+            color: #718096; 
+            text-align: right; 
+            font-weight: 600;
+        }
+
+        .metrics {
+            margin-top: 5px;
+            background: #e2e8f0;
+            padding: 12px;
+            border-radius: 8px;
+        }
+
+        .metric {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 6px;
+            font-size: 0.9em;
+        }
+        
+        .metric-val { font-weight: bold; }
+
+        canvas {
+            width: 100%;
+            height: 100%;
+            background: #e6fffa; /* Light sky blue */
+            border-radius: 6px;
+            touch-action: none;
+        }
+
+        #warning {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #e53e3e;
+            color: white;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-weight: bold;
+            font-size: 0.85em;
+            text-align: center;
+            width: 85%;
+            display: none;
+            z-index: 10;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+        }
+
+        /* Desktop Layout */
+        @media (min-width: 768px) {
+            body {
+                flex-direction: row;
+                height: 100vh;
+                padding: 20px;
+            }
+            .controls {
+                flex: 0 0 320px;
+                height: 100%;
+                overflow-y: auto;
+            }
+            .visualizer {
+                flex: 1;
+                height: 100%;
+            }
+            #warning { width: auto; font-size: 1em; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="controls">
+        <h2>Natural Ventilation</h2>
+        
+        <div class="control-group">
+            <label for="windSpeed">Wind Speed (mph)</label>
+            <input type="range" id="windSpeed" min="0" max="25" value="2">
+            <div class="value-display" id="windVal">2 mph</div>
+        </div>
+
+        <div class="control-group">
+            <label for="sideCurtains">Side Curtains Open</label>
+            <input type="range" id="sideCurtains" min="0" max="100" value="50">
+            <div class="value-display" id="curtainVal">50 %</div>
+        </div>
+
+        <div class="control-group">
+            <label for="ridgeVent">Ridge Vent Open</label>
+            <input type="range" id="ridgeVent" min="0" max="100" value="100">
+            <div class="value-display" id="ridgeVal">100 %</div>
+        </div>
+
+        <div class="control-group">
+            <label for="herdSize">Herd Size (Heat Load)</label>
+            <input type="range" id="herdSize" min="0" max="200" value="100">
+            <div class="value-display" id="herdVal">100 cows</div>
+        </div>
+
+        <div class="metrics">
+            <div class="metric">
+                <span>Dominant Force:</span>
+                <span class="metric-val" id="metForce">Stack Effect</span>
+            </div>
+            <div class="metric">
+                <span>Est. Air Changes/Hr:</span>
+                <span class="metric-val" id="metAch">45 ACH</span>
+            </div>
+            <div class="metric">
+                <span>Environment:</span>
+                <span class="metric-val" id="metStatus">Comfortable</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="visualizer" id="canvasContainer">
+        <div id="warning">⚠️ DANGER: Heat Trapped / Poor Air Quality</div>
+        <canvas id="barnCanvas"></canvas>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('barnCanvas');
+        const ctx = canvas.getContext('2d');
+        const container = document.getElementById('canvasContainer');
+        
+        // Controls
+        const windSlider = document.getElementById('windSpeed');
+        const curtainSlider = document.getElementById('sideCurtains');
+        const ridgeSlider = document.getElementById('ridgeVent');
+        const herdSlider = document.getElementById('herdSize');
+        const warningEl = document.getElementById('warning');
+
+        // State
+        let particles = [];
+        let barnGeo = {};
+
+        function resize() {
+            canvas.width = container.clientWidth - 20;
+            canvas.height = container.clientHeight - 20;
+            updateBarnGeometry();
+        }
+        window.addEventListener('resize', resize);
+        window.addEventListener('orientationchange', () => setTimeout(resize, 100));
+
+        function updateDisplays() {
+            document.getElementById('windVal').innerText = `${windSlider.value} mph`;
+            document.getElementById('curtainVal').innerText = `${curtainSlider.value} %`;
+            document.getElementById('ridgeVal').innerText = `${ridgeSlider.value} %`;
+            document.getElementById('herdVal').innerText = `${herdSlider.value} cows`;
+        }
+
+        function updateBarnGeometry() {
+            const w = canvas.width;
+            const h = canvas.height;
+            
+            barnGeo = {
+                leftWallX: w * 0.15,
+                rightWallX: w * 0.85,
+                wallY: h * 0.6,    // Top of side walls
+                floorY: h * 0.95,  // Ground level
+                peakY: h * 0.15,   // Roof peak
+                midX: w * 0.5,
+                curtainMaxH: h * 0.3, // Max height of open curtain
+                ridgeMaxW: w * 0.1    // Max width of ridge vent
+            };
+        }
+
+        class Particle {
+            constructor(type) {
+                this.type = type; // 'heat' or 'wind'
+                this.reset();
+            }
+
+            reset() {
+                this.life = 0;
+                this.maxLife = 100 + Math.random() * 50;
+                
+                const wind = parseFloat(windSlider.value);
+                const curtain = parseFloat(curtainSlider.value) / 100;
+                
+                if (this.type === 'wind' && wind > 0 && curtain > 0.05) {
+                    // Spawn at left curtain
+                    this.x = barnGeo.leftWallX;
+                    const curtainTop = barnGeo.floorY - (barnGeo.curtainMaxH * curtain);
+                    this.y = barnGeo.floorY - Math.random() * (barnGeo.floorY - curtainTop);
+                    this.vx = wind * 0.5 + Math.random();
+                    this.vy = (Math.random() - 0.5);
+                    this.temp = 0; // Cool air
+                } else {
+                    // Spawn from herd (heat)
+                    this.type = 'heat';
+                    this.x = barnGeo.leftWallX + (barnGeo.rightWallX - barnGeo.leftWallX) * Math.random();
+                    this.y = barnGeo.floorY - 10;
+                    this.vx = (Math.random() - 0.5) * 0.5;
+                    this.vy = -0.5 - Math.random() * 1.5; // Stack effect base upward velocity
+                    this.temp = 100; // Hot air
+                }
+            }
+
+            update(wind, curtain, ridge, herd) {
+                this.life++;
+                
+                // Forces
+                if (this.type === 'heat') {
+                    // Buoyancy pulls heat up faster if hotter (more cows)
+                    this.vy -= (herd / 200) * 0.02; 
+                }
+                
+                // Wind push
+                if (wind > 0 && this.y > barnGeo.wallY) {
+                    this.vx += (wind * 0.02) * curtain;
+                }
+
+                this.x += this.vx;
+                this.y += this.vy;
+
+                // --- COLLISION PHYSICS (The Slanted Ceiling) ---
+                
+                // Check if above wall height
+                if (this.y < barnGeo.wallY) {
+                    let roofY;
+                    let isLeftRoof = this.x < barnGeo.midX;
+                    
+                    if (isLeftRoof) {
+                        // Math for left roof line
+                        let progress = (this.x - barnGeo.leftWallX) / (barnGeo.midX - barnGeo.leftWallX);
+                        roofY = barnGeo.wallY - (barnGeo.wallY - barnGeo.peakY) * progress;
+                    } else {
+                        // Math for right roof line
+                        let progress = (this.x - barnGeo.midX) / (barnGeo.rightWallX - barnGeo.midX);
+                        roofY = barnGeo.peakY + (barnGeo.wallY - barnGeo.peakY) * progress;
+                    }
+
+                    // Did it hit the ceiling?
+                    if (this.y < roofY && this.x > barnGeo.leftWallX && this.x < barnGeo.rightWallX) {
+                        this.y = roofY + 2; // Keep just below ceiling
+                        this.vy = 0; // Stop pure vertical movement
+                        
+                        // Slide up towards the peak!
+                        if (isLeftRoof) {
+                            this.vx += 0.2; // Slide right and up
+                            this.vy -= 0.1; 
+                        } else {
+                            this.vx -= 0.2; // Slide left and up
+                            this.vy -= 0.1;
+                        }
+                    }
+                }
+
+                // --- EXIT LOGIC ---
+                
+                // Ridge Vent Exit
+                let ridgeOpenW = barnGeo.ridgeMaxW * ridge;
+                if (this.y <= barnGeo.peakY + 10 && 
+                    this.x > barnGeo.midX - ridgeOpenW/2 && 
+                    this.x < barnGeo.midX + ridgeOpenW/2) {
+                    this.vy = -2 - (wind * 0.1); // Shoot out top
+                    this.life += 5; // Die faster outside
+                } 
+                // Trapped at peak
+                else if (this.y <= barnGeo.peakY + 5) {
+                    this.vx *= 0.5; // Stall out
+                    this.temp += 1; // Get hotter while trapped
+                }
+
+                // Right Curtain Exit (Wind driven)
+                let curtainTop = barnGeo.floorY - (barnGeo.curtainMaxH * curtain);
+                if (this.x > barnGeo.rightWallX && this.y > curtainTop && this.y < barnGeo.floorY) {
+                    // It escaped out the right side
+                    this.life += 5;
+                }
+
+                // Wall boundaries (don't pass through solid walls)
+                if (this.x < barnGeo.leftWallX && this.y > barnGeo.wallY) this.x = barnGeo.leftWallX;
+                if (this.x > barnGeo.rightWallX && this.y > barnGeo.wallY && this.y < curtainTop) this.x = barnGeo.rightWallX;
+
+                // Reset if dead or off screen
+                if (this.life > this.maxLife || this.x < 0 || this.x > canvas.width || this.y < -50) {
+                    this.reset();
+                }
+            }
+
+            draw() {
+                // Color mapping: Blue (cool/wind) -> Purple -> Red (hot)
+                let hue = this.temp < 50 ? 220 : 0; 
+                if(this.temp > 0 && this.temp < 100) {
+                     hue = 220 - (this.temp * 2.2); // Gradient
+                }
+                if(this.temp > 100) hue = 0; // Max red
+                
+                let opacity = 1 - (this.life / this.maxLife);
+                ctx.fillStyle = `hsla(${hue}, 80%, 50%, ${opacity})`;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, 4, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+
+        function drawBarn() {
+            ctx.fillStyle = '#cbd5e0';
+            // Ground
+            ctx.fillRect(0, barnGeo.floorY, canvas.width, canvas.height - barnGeo.floorY);
+            
+            ctx.lineWidth = 6;
+            ctx.strokeStyle = '#4a5568';
+            ctx.lineCap = 'round';
+
+            let curtain = parseFloat(curtainSlider.value) / 100;
+            let ridge = parseFloat(ridgeSlider.value) / 100;
+            let curtainSolidTop = barnGeo.floorY - (barnGeo.curtainMaxH * curtain);
+
+            // Left Wall (Solid part below curtain)
+            ctx.beginPath(); ctx.moveTo(barnGeo.leftWallX, barnGeo.floorY); ctx.lineTo(barnGeo.leftWallX, curtainSolidTop); ctx.stroke();
+            // Left Wall (Solid part above curtain)
+            ctx.beginPath(); ctx.moveTo(barnGeo.leftWallX, barnGeo.wallY + barnGeo.curtainMaxH); ctx.lineTo(barnGeo.leftWallX, barnGeo.wallY); ctx.stroke();
+            
+            // Right Wall
+            ctx.beginPath(); ctx.moveTo(barnGeo.rightWallX, barnGeo.floorY); ctx.lineTo(barnGeo.rightWallX, curtainSolidTop); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(barnGeo.rightWallX, barnGeo.wallY + barnGeo.curtainMaxH); ctx.lineTo(barnGeo.rightWallX, barnGeo.wallY); ctx.stroke();
+
+            // Roof
+            let ridgeEdgeL = barnGeo.midX - (barnGeo.ridgeMaxW/2 * ridge);
+            let ridgeEdgeR = barnGeo.midX + (barnGeo.ridgeMaxW/2 * ridge);
+            
+            // Left Roof
+            ctx.beginPath(); ctx.moveTo(barnGeo.leftWallX, barnGeo.wallY); ctx.lineTo(ridgeEdgeL, barnGeo.peakY); ctx.stroke();
+            // Right Roof
+            ctx.beginPath(); ctx.moveTo(barnGeo.rightWallX, barnGeo.wallY); ctx.lineTo(ridgeEdgeR, barnGeo.peakY); ctx.stroke();
+
+            // Cows (visual representation)
+            ctx.fillStyle = '#8c6b5d';
+            let cowCount = Math.min(20, Math.floor(parseFloat(herdSlider.value) / 10));
+            let spacing = (barnGeo.rightWallX - barnGeo.leftWallX) / 22;
+            for(let i=1; i<=cowCount; i++) {
+                ctx.fillRect(barnGeo.leftWallX + (i*spacing), barnGeo.floorY - 10, 15, 10);
+            }
+        }
+
+        function calculateMetrics(wind, curtain, ridge, herd) {
+            let stackForce = herd * (ridge + 0.1); // Needs ridge to work well
+            let windForce = (wind * 10) * curtain;
+
+            // ACH roughly estimated
+            let baseACH = (stackForce * 0.3) + (windForce * 0.8);
+            if (baseACH < 2) baseACH = 2; // Infiltration
+            
+            document.getElementById('metAch').innerText = `${Math.round(baseACH)} ACH`;
+
+            if (windForce > stackForce * 1.5) {
+                document.getElementById('metForce').innerText = "Wind Driven";
+                document.getElementById('metForce').style.color = "#3182ce";
+            } else if (stackForce > windForce * 1.5) {
+                document.getElementById('metForce').innerText = "Stack Effect";
+                document.getElementById('metForce').style.color = "#e53e3e";
+            } else {
+                document.getElementById('metForce').innerText = "Mixed Forces";
+                document.getElementById('metForce').style.color = "#805ad5";
+            }
+
+            // Status & Warnings
+            let statusEl = document.getElementById('metStatus');
+            let isTrapped = herd > 50 && ridge < 0.2 && (wind < 5 || curtain < 0.2);
+            
+            if (isTrapped) {
+                statusEl.innerText = "Severe Heat/Gas";
+                statusEl.style.color = "red";
+                warningEl.style.display = 'block';
+            } else if (baseACH < 20 && herd > 50) {
+                statusEl.innerText = "Stuffy / Marginal";
+                statusEl.style.color = "orange";
+                warningEl.style.display = 'none';
+            } else if (wind > 15 && curtain > 0.8) {
+                statusEl.innerText = "High Drafts";
+                statusEl.style.color = "blue";
+                warningEl.style.display = 'none';
+            } else {
+                statusEl.innerText = "Comfortable";
+                statusEl.style.color = "green";
+                warningEl.style.display = 'none';
+            }
+        }
+
+        function animate() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            updateDisplays();
+
+            const wind = parseFloat(windSlider.value);
+            const curtain = parseFloat(curtainSlider.value) / 100;
+            const ridge = parseFloat(ridgeSlider.value) / 100;
+            const herd = parseFloat(herdSlider.value);
+
+            calculateMetrics(wind, curtain, ridge, herd);
+            drawBarn();
+
+            // Manage particles dynamically based on herd and wind
+            let targetParticles = (herd * 1.5) + (wind * 5 * curtain);
+            if (targetParticles > 300) targetParticles = 300; // Cap for performance
+            
+            // Add particles
+            if (particles.length < targetParticles) {
+                let type = Math.random() < (wind*curtain / 25) ? 'wind' : 'heat';
+                if(herd === 0) type = 'wind';
+                particles.push(new Particle(type));
+            }
+            // Remove excess
+            if (particles.length > targetParticles) {
+                particles.splice(0, particles.length - targetParticles);
+            }
+
+            for (let p of particles) {
+                p.update(wind, curtain, ridge, herd);
+                p.draw();
+            }
+
+            requestAnimationFrame(animate);
+        }
+
+        // Init
+        resize();
+        
+        // Populate initial particles
+        for(let i=0; i<100; i++) particles.push(new Particle('heat'));
+        
+        animate();
+
+    </script>
+</body>
+</html>
