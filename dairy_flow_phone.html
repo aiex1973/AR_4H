@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Dairy Barn Ventilation Visualizer</title>
+    <style>
+        /* Mobile-First Base Styles */
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            margin: 0;
+            padding: 15px;
+            background-color: #f4f4f9;
+            color: #333;
+            display: flex;
+            flex-direction: column; /* Stack vertically on mobile */
+            gap: 15px;
+            box-sizing: border-box;
+            min-height: 100vh;
+        }
+
+        .sidebar {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            width: 100%;
+            box-sizing: border-box;
+        }
+
+        .main-content {
+            background: white;
+            padding: 10px;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            position: relative;
+            width: 100%;
+            box-sizing: border-box;
+            height: 50vh; /* Takes up half the screen on mobile */
+            min-height: 350px;
+        }
+
+        h2, h3 { margin-top: 0; margin-bottom: 5px; }
+        
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+
+        label { 
+            font-weight: bold; 
+            font-size: 0.95em; 
+        }
+
+        /* Make sliders and dropdowns taller for easier tapping */
+        input[type="range"], select { 
+            width: 100%; 
+            padding: 10px 5px; 
+            box-sizing: border-box;
+            touch-action: manipulation;
+        }
+        
+        select {
+            font-size: 16px; /* Prevents auto-zoom on iOS */
+            padding: 8px;
+        }
+
+        .value-display { 
+            font-size: 0.9em; 
+            color: #666; 
+            text-align: right; 
+            font-weight: bold;
+        }
+
+        .metrics {
+            margin-top: 10px;
+            background: #e9ecef;
+            padding: 12px;
+            border-radius: 6px;
+        }
+
+        .metric {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+            font-weight: bold;
+            font-size: 0.95em;
+        }
+
+        canvas {
+            width: 100%;
+            height: 100%;
+            background: #fafafa;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            touch-action: none; /* Prevents scrolling when touching the canvas */
+        }
+
+        #warningMessage {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #dc3545;
+            color: white;
+            padding: 8px 15px;
+            border-radius: 4px;
+            font-weight: bold;
+            font-size: 0.85em;
+            text-align: center;
+            width: 80%;
+            display: none;
+            z-index: 10;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+
+        /* Tablet & Desktop Layout */
+        @media (min-width: 768px) {
+            body {
+                flex-direction: row;
+                height: 100vh;
+                padding: 20px;
+            }
+            .sidebar {
+                flex: 0 0 320px;
+                height: 100%;
+                overflow-y: auto;
+            }
+            .main-content {
+                flex: 1;
+                height: 100%;
+            }
+            #warningMessage {
+                width: auto;
+                font-size: 1em;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="sidebar">
+        <h2>Controls</h2>
+        
+        <div class="control-group">
+            <label for="ventType">Ventilation Type</label>
+            <select id="ventType">
+                <option value="tunnel">Tunnel Ventilation</option>
+                <option value="cross">Cross Ventilation</option>
+            </select>
+        </div>
+
+        <div class="control-group">
+            <label for="outTemp">Outside Temperature</label>
+            <input type="range" id="outTemp" min="20" max="105" value="85">
+            <div class="value-display" id="outTempVal">85 °F</div>
+        </div>
+
+        <div class="control-group">
+            <label for="fanPower">Exhaust Fans Power</label>
+            <input type="range" id="fanPower" min="0" max="100" value="50">
+            <div class="value-display" id="fanPowerVal">50 %</div>
+        </div>
+
+        <div class="control-group">
+            <label for="inletOpen">Inlet Opening</label>
+            <input type="range" id="inletOpen" min="10" max="100" value="50">
+            <div class="value-display" id="inletOpenVal">50 %</div>
+        </div>
+
+        <div class="metrics">
+            <h3>Estimates</h3>
+            <div class="metric">
+                <span>Air Velocity:</span>
+                <span id="metricVelocity">0 FPM</span>
+            </div>
+            <div class="metric">
+                <span>Internal Temp Rise:</span>
+                <span id="metricTempRise">+0 °F</span>
+            </div>
+            <div class="metric" style="color: #555; font-size: 0.85em; margin-top: 5px; font-weight: normal;">
+                <span>Avg Inside Temp:</span>
+                <span id="metricTotalTemp">85 °F</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="main-content" id="canvasContainer">
+        <div id="warningMessage">WARNING: Airflow Restricted!</div>
+        <canvas id="barnCanvas"></canvas>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('barnCanvas');
+        const ctx = canvas.getContext('2d');
+        const container = document.getElementById('canvasContainer');
+        
+        // DOM Elements
+        const ventTypeSelect = document.getElementById('ventType');
+        const outTempSlider = document.getElementById('outTemp');
+        const fanPowerSlider = document.getElementById('fanPower');
+        const inletOpenSlider = document.getElementById('inletOpen');
+        const warningMessage = document.getElementById('warningMessage');
+        
+        const metricVelocity = document.getElementById('metricVelocity');
+        const metricTempRise = document.getElementById('metricTempRise');
+        const metricTotalTemp = document.getElementById('metricTotalTemp');
+
+        // State
+        let particles = [];
+        let animationId;
+
+        // Resize canvas to exactly fit container (accounting for padding)
+        function resize() {
+            // Re-measure container dimensions minus padding (10px on all sides)
+            canvas.width = container.clientWidth - 20;
+            canvas.height = container.clientHeight - 20;
+        }
+        
+        // Listen for screen flips or resizes
+        window.addEventListener('resize', resize);
+        window.addEventListener('orientationchange', () => {
+            setTimeout(resize, 100); // Slight delay allows browser UI to settle
+        });
+
+        // Update displays
+        function updateDisplays() {
+            document.getElementById('outTempVal').innerText = `${outTempSlider.value} °F`;
+            document.getElementById('fanPowerVal').innerText = `${fanPowerSlider.value} %`;
+            document.getElementById('inletOpenVal').innerText = `${inletOpenSlider.value} %`;
+        }
+
+        // Color mapping for temperature
+        function getTempColor(temp) {
+            if (temp < 40) return `hsl(240, 100%, 60%)`; // Blue
+            if (temp < 60) return `hsl(180, 100%, 40%)`; // Teal
+            if (temp < 80) return `hsl(120, 100%, 40%)`; // Green
+            if (temp < 95) return `hsl(45, 100%, 50%)`;  // Yellow/Orange
+            return `hsl(0, 100%, 50%)`;                  // Red
+        }
+
+        class Particle {
+            constructor(ventType, w, h, inletOpenPercent) {
+                this.life = 0;
+                
+                if (ventType === 'tunnel') {
+                    let spawnRange = h * (inletOpenPercent / 100);
+                    let offset = (h - spawnRange) / 2;
+                    this.x = 0;
+                    this.y = offset + Math.random() * spawnRange;
+                } else {
+                    let spawnRange = w * (inletOpenPercent / 100);
+                    let offset = (w - spawnRange) / 2;
+                    this.x = offset + Math.random() * spawnRange;
+                    this.y = 0;
+                }
+                
+                this.initialTemp = parseFloat(outTempSlider.value);
+            }
+
+            update(speedMult, ventType, isRestricted, canvasW, canvasH) {
+                let currentSpeed = isRestricted ? speedMult * 0.2 : speedMult;
+                if (currentSpeed < 0.5 && speedMult > 0) currentSpeed = 0.5;
+
+                // Adjust speed for mobile screen size so it feels consistent
+                let speedFactor = (canvasW / 800) * 4; 
+                if (speedFactor < 2) speedFactor = 2;
+
+                if (ventType === 'tunnel') {
+                    this.x += currentSpeed * speedFactor;
+                    this.y += (Math.random() - 0.5); 
+                } else {
+                    this.y += currentSpeed * speedFactor;
+                    this.x += (Math.random() - 0.5);
+                }
+                
+                let distanceRatio = ventType === 'tunnel' ? this.x / canvasW : this.y / canvasH;
+                let heatGain = (100 - fanPowerSlider.value) / 10; 
+                if (heatGain < 2) heatGain = 2; 
+                
+                this.currentTemp = this.initialTemp + (heatGain * distanceRatio);
+                this.life = distanceRatio * 100;
+            }
+
+            draw(ctx) {
+                ctx.fillStyle = getTempColor(this.currentTemp);
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, 3, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+
+        function drawBarnStructure(w, h, ventType) {
+            ctx.fillStyle = '#e0e0e0';
+            ctx.fillRect(0, 0, w, h);
+
+            // Draw cow rows (scale based on screen size)
+            ctx.fillStyle = '#c7bca1';
+            let rows = ventType === 'tunnel' ? 4 : 6;
+            
+            if (ventType === 'tunnel') {
+                let rowHeight = h / (rows * 2);
+                for(let i = 1; i < rows * 2; i += 2) {
+                    ctx.fillRect(w * 0.1, i * rowHeight, w * 0.8, rowHeight);
+                }
+            } else {
+                let rowWidth = w / (rows * 2);
+                for(let i = 1; i < rows * 2; i += 2) {
+                    ctx.fillRect(i * rowWidth, h * 0.1, rowWidth, h * 0.8);
+                }
+                ctx.fillStyle = 'rgba(0,0,0,0.3)';
+                for(let i = 1; i < rows * 2; i += 2) {
+                    ctx.fillRect(i * rowWidth, 0, rowWidth, h); 
+                }
+            }
+
+            // Draw Inlets and Fans
+            ctx.lineWidth = 6;
+            let inletOpen = parseFloat(inletOpenSlider.value) / 100;
+            
+            if (ventType === 'tunnel') {
+                ctx.strokeStyle = '#007bff';
+                ctx.beginPath();
+                ctx.moveTo(0, h/2 - (h * inletOpen / 2));
+                ctx.lineTo(0, h/2 + (h * inletOpen / 2));
+                ctx.stroke();
+                
+                ctx.strokeStyle = '#dc3545';
+                ctx.beginPath();
+                ctx.moveTo(w, 0);
+                ctx.lineTo(w, h);
+                ctx.stroke();
+            } else {
+                ctx.strokeStyle = '#007bff';
+                ctx.beginPath();
+                ctx.moveTo(w/2 - (w * inletOpen / 2), 0);
+                ctx.lineTo(w/2 + (w * inletOpen / 2), 0);
+                ctx.stroke();
+                
+                ctx.strokeStyle = '#dc3545';
+                ctx.beginPath();
+                ctx.moveTo(0, h);
+                ctx.lineTo(w, h);
+                ctx.stroke();
+            }
+        }
+
+        function loop() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            updateDisplays();
+
+            const ventType = ventTypeSelect.value;
+            const fanPower = parseFloat(fanPowerSlider.value);
+            const inletOpen = parseFloat(inletOpenSlider.value);
+            const outTemp = parseFloat(outTempSlider.value);
+
+            const isRestricted = fanPower > 80 && inletOpen < 30;
+            warningMessage.style.display = isRestricted ? 'block' : 'none';
+
+            let baseFPM = (fanPower / 100) * 800; 
+            let actualFPM = isRestricted ? baseFPM * 0.3 : baseFPM * (inletOpen / 100 > 0.5 ? 1 : 0.8);
+            metricVelocity.innerText = `${Math.round(actualFPM)} FPM`;
+
+            let tempRise = 0;
+            if (fanPower > 0) {
+                tempRise = (100 - actualFPM/8) / 10;
+                if(tempRise < 0) tempRise = 0;
+            } else {
+                tempRise = 15; 
+            }
+            metricTempRise.innerText = `+${tempRise.toFixed(1)} °F`;
+            metricTotalTemp.innerText = `${(outTemp + tempRise).toFixed(1)} °F`;
+
+            drawBarnStructure(canvas.width, canvas.height, ventType);
+
+            // Scale particle count for performance on mobile
+            let maxParticles = window.innerWidth < 768 ? 150 : 300;
+            let targetParticles = (fanPower / 100) * maxParticles; 
+            
+            if (particles.length < targetParticles) {
+                particles.push(new Particle(ventType, canvas.width, canvas.height, inletOpen));
+            }
+
+            for (let i = particles.length - 1; i >= 0; i--) {
+                let p = particles[i];
+                p.update(fanPower / 100, ventType, isRestricted, canvas.width, canvas.height);
+                p.draw(ctx);
+
+                if (p.x > canvas.width || p.y > canvas.height || p.life >= 100) {
+                    particles.splice(i, 1);
+                }
+            }
+            
+            if(particles.length > targetParticles) {
+                particles.splice(0, particles.length - targetParticles);
+            }
+
+            animationId = requestAnimationFrame(loop);
+        }
+
+        // Initialize
+        resize();
+        loop();
+
+        ventTypeSelect.addEventListener('change', () => { particles = []; });
+    </script>
+</body>
+</html>
